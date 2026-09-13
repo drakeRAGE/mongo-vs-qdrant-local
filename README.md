@@ -1,103 +1,147 @@
 <div align="center">
 
-<img src="docs/assets/banner.png" alt="mongo vs qdrant — local study (VectorDB Proof)" width="100%" />
+<img src="docs/assets/banner.png" alt="mongo vs qdrant — local study" width="100%" />
 
 # VectorDB Proof
 
-**When is a dedicated vector database the better local choice than MongoDB `$vectorSearch`?**
+Local measurement of when Qdrant is the better choice than MongoDB Community `$vectorSearch` (`mongod` + `mongot`) on one inventoried 16 GB laptop.
 
-A measured answer on one inventoried 16 GB laptop — not a vendor bake-off.
+[![status](https://img.shields.io/badge/study-in%20progress-C4A35A?style=flat-square)](docs/07-results.md)
+[![ladder](https://img.shields.io/badge/measured-10K%20→%20500K-0B6E4F?style=flat-square)](docs/07-results.md)
+[![next](https://img.shields.io/badge/next%20cell-1M-555555?style=flat-square)](docs/05-protocol.md)
+[![license](https://img.shields.io/badge/license-MIT-0B6E4F?style=flat-square)](LICENSE)
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-0B6E4F?style=flat-square)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square)](requirements.txt)
-[![Docker Compose](https://img.shields.io/badge/docker-compose%20profiles-2496ED?style=flat-square)](compose/docker-compose.yml)
-[![Measured](https://img.shields.io/badge/measured-500K%20vectors-C4A35A?style=flat-square)](docs/07-results.md)
-
-[Results](docs/07-results.md) · [Protocol](docs/05-protocol.md) · [Threats](docs/06-threats-to-validity.md) · [Cite](CITATION.cff)
+[Working results](docs/07-results.md) · [Protocol](docs/05-protocol.md) · [Threats](docs/06-threats-to-validity.md) · [Manuscripts](#manuscripts)
 
 </div>
 
 ---
 
-## Finding (through 500K)
+## Status
 
-On this host, **concurrency 1**, **unfiltered** kNN, **Recall@10 ≥ 0.95**:
+The study is **open**. The frozen corpus, harness, and protocol are locked. The scale ladder has been run through **500K**. The protocol’s 1M cell has not been run. Nothing below is a product recommendation or a claim about Atlas, cloud Qdrant, or another machine.
 
-- Through **250K**, both engines stay interactive (p95 &lt; 50 ms). Mongo is faster; Qdrant uses less RAM. No latency crossover.
-- At **500K iso-config** (median of 3 trials), Mongo p95 is **69 ms** — the first time it misses the 50 ms bar. Qdrant stays at **32 ms** and **1.08 GB** RSS.
-- That Mongo median is pulled by the two trials immediately after a ~8 min ingest/index (mongot CPU spiked to ~340%). Trial 3 and the iso-recall sweep are **15–17 ms**. Once warm, Mongo is still faster.
-- Iso-recall still picks **ef = 32** for both engines at 100K, 250K, and 500K.
+| Phase | State |
+|---|---|
+| E0 harness (10K, Recall@10 ≈ 1.0) | Done |
+| E1 scale ladder, iso-config | Done at 10K, 50K, 100K, 250K, 500K |
+| E1 iso-recall sweep | Done at 100K, 250K, 500K |
+| E2 concurrency {1, 4, 8} | Done at 100K, 250K, 500K |
+| E3 filtered ANN | Done at 500K (also recorded at smaller N) |
+| E4 ingest / time-to-searchable | Done at 100K, 250K, 500K |
+| E5 first-50 queries, no warmup | Done — **not** a container restart |
+| E6 RSS from `docker stats` | Done at each completed N |
+| **1M** (protocol primary remaining cell) | **Not run** |
+| 5M | Out of scope on this host |
 
-| N | Mongo p95 | Qdrant p95 | p95 ratio | Mongo RSS | Qdrant RSS |
+Discussion thresholds, not trophies: p95 &lt; 50 ms, p99 &lt; 100 ms, Recall@10 ≥ 0.95. Headline comparison is **iso-recall**, not iso-config.
+
+---
+
+## Question
+
+On this host, at what corpus size — if any — does a dedicated HNSW engine become the better local choice than Community `$vectorSearch` for unfiltered and lightly filtered kNN?
+
+Locked factors: Dell Inspiron 14 Plus 7440, Intel Core Ultra 7 155H, ~15.46 GiB soldered RAM, Docker one engine at a time, `BAAI/bge-small-en-v1.5` 384-d L2-normalized once, cosine / inner product, exact top-100 ground truth, seed `20260912`. Query embedding SHA is unchanged from the 10K prefix through 500K (`1f4538d26c541d73c26541429b3e122e1d8f56a198a5e48bc0a56aa7b7ea9200`).
+
+---
+
+## Settled on this apparatus (through 500K)
+
+These statements are supported by the committed JSONL. They are limited to this box, these images, this frozen matrix, and concurrency-1 unfiltered kNN unless noted.
+
+1. **The harness matches both engines to the same truth.** At 10K and high search width, Recall@10 is 0.999–1.000 on Mongo and 1.000 on Qdrant (E0).
+2. **Warm unfiltered kNN stays interactive through 500K on both engines** once the index is searchable and the process is past ingest. Iso-recall operating point (smallest ef with Recall@10 ≥ 0.95) is **ef = 32** for both at 100K, 250K, and 500K. Mongo p95 is 14.5 / 16.4 / 15.4 ms. Qdrant p95 is 32.8 / 33.3 / 31.8 ms.
+3. **Qdrant’s p95 is almost flat in N.** Iso-config medians sit between 31.7 ms and 33.5 ms from 10K to 500K.
+4. **Mongo is faster on the warm path; Qdrant uses less RAM.** At 500K, Qdrant RSS is 1.08 GB against Mongo’s ~2.2 GB (`mongod` + `mongot`). That gap exists at every N with a usable RSS sample.
+5. **Iso-config and iso-recall are not the same experiment.** The 500K Mongo iso-config median p95 of 69.4 ms is the median of three trials, two of which ran immediately after a ~470 s ingest while `mongot` CPU was ~340%. Trial 3 and the iso-recall sweep are 15–17 ms. That 69 ms figure is a post-ingest tail, not a measured latency crossover.
+6. **Filtered ANN at 500K does not invert the latency ranking.** Qdrant stays ~31–33 ms across 1 / 10 / 50 / 100% selectivity. Mongo stays below that. Filtered Recall@10 is scored against *unfiltered* neighbors, so it tracks selectivity (~0.016 / 0.10 / 0.50 / 0.98), not index quality.
+7. **Time-to-searchable at 500K is the same order of magnitude** (Mongo 470 s, Qdrant 494 s, batch 256). The discarded 1908 s Qdrant point was an NTFS bind-mount failure, not a scale result. On Windows, Qdrant storage has to be a Docker named volume.
+8. **5M 384-d vectors are not a primary condition** on 16 GB soldered RAM. Community `mongot` is preview software.
+
+Iso-recall operating points (decision numbers used so far):
+
+| N | Mongo p95 | Qdrant p95 | ef picked | Recall@10 (M / Q) |
+|---|---:|---:|---:|---|
+| 100K | 14.5 ms | 32.8 ms | 32 | 0.989 / 0.992 |
+| 250K | 16.4 ms | 33.3 ms | 32 | 0.982 / 0.992 |
+| 500K | 15.4 ms | 31.8 ms | 32 | 0.967 / 0.988 |
+
+Iso-config medians (protocol table, including the post-ingest Mongo trials):
+
+| N | Mongo p95 | Qdrant p95 | p95(Q)/p95(M) | Mongo RSS | Qdrant RSS |
 |---|---:|---:|---:|---:|---:|
 | 10K | 12.0 ms | 31.7 ms | 2.64 | 1.07 GB | — |
 | 50K | 15.1 ms | 32.6 ms | 2.16 | 1.76 GB | 0.21 GB |
 | 100K | 16.5 ms | 32.4 ms | 1.96 | 2.11 GB | 0.29 GB |
 | 250K | 19.3 ms | 33.5 ms | 1.73 | 2.29 GB | 0.61 GB |
-| **500K** | **69.4 ms** | **31.7 ms** | **0.46** | **2.20 GB** | **1.08 GB** |
+| 500K | 69.4 ms | 31.7 ms | 0.46 | 2.20 GB | 1.08 GB |
 
-At **8-way concurrency** and 500K, both stay under 50 ms p95 (Mongo 35 ms, Qdrant 34 ms). Mongo p99 is 148 ms at 8-way. **1M was not run.**
+---
 
-Full tables, every figure, and what we did *not* measure: **[docs/07-results.md](docs/07-results.md)**.
+## Still open
 
-## Is this enough?
+These are the reasons the study is not closed.
 
-**Yes — for the question this laptop can answer.** Through 500K, a dedicated vector DB is **not required** for warm unfiltered kNN at Recall@10 ≥ 0.95. Mongo is faster once warm; Qdrant uses about half the RAM; filters do not flip the ranking.
+1. **1M.** Protocol question 3 (iso-recall at 1M) and question 7 (whether Mongo’s two-process RSS forces paging first) are unanswered. The 1M cell runs only if the host stays off the pagefile.
+2. **Whether a dedicated engine is *required*.** Through 500K, warm unfiltered kNN does not require one for latency. That can still change at 1M, under 8-way load after a real restart, or when RAM — not p95 — is the constraint.
+3. **Mongo 500K ingest tail.** We have not repeated 500K iso-config after a cooling gap. We do not yet know how much of the 69 ms median is “just warmed up” versus “this build is unstable at this size.”
+4. **True cold start.** E5 is the first 50 queries with warmup skipped. The protocol’s container restart has not been run.
+5. **Concurrency ranking.** At 100K and 250K, Qdrant p95 crossed 50 ms at 8 clients (51 ms, 54 ms). At 500K it did not (34 ms). E2 also used iso-config ef=64, not the iso-recall pick. Until that is repeated, we do not treat 8-way ranking as settled.
+6. **Writes, deletes, skewed tenants, 768-d, quantization, Atlas.** Not in this study.
 
-**No — if you need a hard scale cliff.** Protocol 1M was not run. The iso-config Mongo 69 ms point is a post-ingest warmup artifact, not a crossover. E5 did not restart the container (first-50-no-warmup only). This is one 16 GB Windows box and preview `mongot`. It does not speak for Atlas, 1536-d embeddings, or write-heavy production.
-
-Optional next cell: **1M**, only if the host stays off the pagefile. 5M is out of scope on this machine.
+---
 
 ## Figures
 
-**Headline (iso-recall, the decision number):**
+Generated from `experiments/results/*.jsonl`. Empty or noisy series mean the cell is thin, not that a winner was assumed.
+
+**Working comparison (iso-recall p95 vs N).** Both engines remain under 50 ms at the ef=32 operating point.
 
 <p align="center">
-  <img src="experiments/plots/e1_iso_recall_p95_vs_n.png" alt="Iso-recall p95 vs N" width="82%" />
+  <img src="experiments/plots/e1_iso_recall_p95_vs_n.png" alt="Iso-recall p95 versus corpus size" width="84%" />
 </p>
 
-**Why the 500K Mongo iso-config spike is not the decision number:**
+**Iso-config median versus iso-recall.** Left panel is why 500K Mongo looks like a crossover in the protocol table. Right panel is the warm operating point.
 
 <p align="center">
-  <img src="experiments/plots/e1_p95_iso_config_vs_iso_recall.png" alt="Iso-config median vs iso-recall operating point" width="96%" />
+  <img src="experiments/plots/e1_p95_iso_config_vs_iso_recall.png" alt="Iso-config median versus iso-recall operating point" width="96%" />
 </p>
 
+**Scale, RAM, ingest**
+
 <p align="center">
-  <img src="experiments/plots/e1_p95_vs_n.png" alt="iso-config p95 vs N" width="48%" />
-  <img src="experiments/plots/e1_p95_ratio_vs_n.png" alt="p95 ratio vs N" width="48%" />
+  <img src="experiments/plots/e1_p95_vs_n.png" alt="Iso-config p95 versus N" width="48%" />
+  <img src="experiments/plots/e1_p95_ratio_vs_n.png" alt="p95 ratio versus N" width="48%" />
 </p>
 <p align="center">
-  <img src="experiments/plots/e6_rss_vs_n.png" alt="Docker RSS vs N" width="48%" />
-  <img src="experiments/plots/e4_ingest_vs_n.png" alt="Time to searchable vs N" width="48%" />
+  <img src="experiments/plots/e6_rss_vs_n.png" alt="Docker RSS versus N" width="48%" />
+  <img src="experiments/plots/e4_ingest_vs_n.png" alt="Time to searchable versus N" width="48%" />
 </p>
+
+**Load and filters**
+
 <p align="center">
-  <img src="experiments/plots/e2_p95_vs_concurrency.png" alt="p95 vs concurrency" width="48%" />
+  <img src="experiments/plots/e2_p95_vs_concurrency.png" alt="p95 versus concurrency" width="48%" />
   <img src="experiments/plots/e3_filter_p95.png" alt="Filtered ANN p95" width="48%" />
 </p>
+
+**Quality knobs and first queries**
+
 <p align="center">
-  <img src="experiments/plots/e1_pareto_recall_p95.png" alt="Recall vs p95 Pareto" width="48%" />
-  <img src="experiments/plots/e1_iso_recall_vs_ef.png" alt="p95 and recall vs ef" width="48%" />
+  <img src="experiments/plots/e1_pareto_recall_p95.png" alt="Recall versus p95" width="48%" />
+  <img src="experiments/plots/e1_iso_recall_vs_ef.png" alt="p95 and recall versus search width" width="48%" />
 </p>
 <p align="center">
-  <img src="experiments/plots/e5_cold_p95.png" alt="Cold start p95" width="48%" />
-  <img src="experiments/plots/e1_qps_vs_n.png" alt="QPS vs N" width="48%" />
+  <img src="experiments/plots/e5_cold_p95.png" alt="No-warmup p95" width="48%" />
+  <img src="experiments/plots/e1_qps_vs_n.png" alt="QPS versus N" width="48%" />
 </p>
 
-<p align="center"><sub>Interactive discussion threshold: p95 &lt; 50 ms, p99 &lt; 100 ms. Ground truth is exact top-100 inner product on the frozen unit vectors. Fifteen committed figures live in <code>experiments/plots/</code>.</sub></p>
+Also in [`experiments/plots/`](experiments/plots/): p99 vs N, Recall@10 vs N, QPS vs concurrency. Source rows: [`experiments/results/`](experiments/results/). Narrative chapter: [`docs/07-results.md`](docs/07-results.md).
 
-## Why this study exists
+---
 
-Most “Mongo vs Qdrant” posts mix Atlas, different embedding models, and iso-config HNSW knobs. This repo freezes the things that actually move the answer:
-
-| Locked choice | Value |
-|---|---|
-| Host | Dell Inspiron 14 Plus 7440 · Intel Core Ultra 7 155H · **~15.46 GiB soldered RAM** |
-| Engines | MongoDB 8.2 Community + `mongot` **xor** Qdrant 1.15.4 (Docker profiles) |
-| Embeddings | `BAAI/bge-small-en-v1.5` · 384-d · L2-normalized · **encoded once** |
-| Distance | Cosine / inner product on unit vectors |
-| Ground truth | Exact top-100 IP (NumPy) |
-| Primary k | 10 · headline comparison is **iso-recall**, not iso-config |
-| Seed | `20260912` |
+## Method
 
 ```mermaid
 flowchart LR
@@ -106,35 +150,45 @@ flowchart LR
   B --> D{one engine}
   D -->|profile mongo| E[mongod :27018<br/>+ mongot]
   D -->|profile qdrant| F[Qdrant HNSW<br/>named volume]
-  E --> G[E0–E6 harness]
+  E --> G[E0–E6]
   F --> G
   C --> G
-  G --> H[JSONL + plots<br/>docs/07-results.md]
+  G --> H[JSONL + plots]
 ```
+
+| Item | Value |
+|---|---|
+| Host | Inspiron 14 Plus 7440, Ultra 7 155H, 16 GB LPDDR5 soldered |
+| Engines | MongoDB 8.2 Community + `mongot` 1.70.4 **xor** Qdrant 1.15.4 |
+| Embeddings | `BAAI/bge-small-en-v1.5`, 384-d, L2-normalized, encoded once |
+| Distance | Cosine / IP on unit vectors |
+| Ground truth | Exact top-100 inner product (NumPy) |
+| Iso-config | M=16, efConstruction=200, search width 64 |
+| Iso-recall | Sweep {32, 64, 128, 256}; pick smallest width with Recall@10 ≥ 0.95 |
+| Queries | 50 warmup + 500 measured; 3 trials; median of trial percentiles |
+| Seed | `20260912` |
+
+One engine at a time. Docker / WSL2 capped at 10 GB on this host. A trial is discarded if the pagefile is active in the timed window, both profiles are up, measured n &lt; 200, or error rate &gt; 1%.
+
+---
 
 ## Manuscripts
 
-| # | Chapter | What it settles |
-|---|---|---|
-| 1 | [Foundations](docs/01-foundations.md) | Embeddings, distance, HNSW |
-| 2 | [MongoDB vector search](docs/02-mongodb-vector-search.md) | `$vectorSearch` and local `mongot` |
-| 3 | [Qdrant architecture](docs/03-qdrant-architecture.md) | Collection model and HNSW knobs |
-| 4 | [Hardware and budget](docs/04-hardware-and-budget.md) | Why 16 GB is the binding constraint |
-| 5 | [Protocol](docs/05-protocol.md) | E0–E6, iso-recall, discard rules |
-| 6 | [Threats to validity](docs/06-threats-to-validity.md) | What this box cannot claim |
-| 7 | [Results](docs/07-results.md) | Generated only from measured JSONL |
+| # | Chapter |
+|---|---|
+| 1 | [Foundations](docs/01-foundations.md) |
+| 2 | [MongoDB vector search](docs/02-mongodb-vector-search.md) |
+| 3 | [Qdrant architecture](docs/03-qdrant-architecture.md) |
+| 4 | [Hardware and budget](docs/04-hardware-and-budget.md) |
+| 5 | [Protocol](docs/05-protocol.md) |
+| 6 | [Threats to validity](docs/06-threats-to-validity.md) |
+| 7 | [Results](docs/07-results.md) — generated from JSONL only |
 
-## Hard rules
-
-- Run **one engine at a time**. Compose profiles `mongo` and `qdrant` are mutually exclusive.
-- Cap Docker Desktop / WSL2 at **10 GB RAM** on this 16 GB host.
-- If the pagefile is active during a timed window, **discard the trial**.
-- 5 million 384-d vectors are not a primary condition on this machine.
-- On Windows, Qdrant storage must be a **Docker named volume**. An NTFS/9p bind mount panics the HNSW optimizer.
+---
 
 ## Reproduce
 
-Python 3.10+ and Docker Desktop.
+Python 3.10+ and Docker Desktop. On this machine Docker `mongod` is published on **27018** because a native `mongod` already occupies 27017.
 
 ```powershell
 git clone https://github.com/drakeRAGE/mongo-vs-qdrant-local.git
@@ -142,65 +196,31 @@ cd mongo-vs-qdrant-local
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
 
-On this apparatus, Docker MongoDB is published on **host port 27018** because a native `mongod` already occupies 27017.
-
-```powershell
 python -m src.runners.study prepare --max-docs 10000
-
 .\scripts\one_engine.ps1 qdrant
 python scripts\check_host.py --expect qdrant
 python -m src.runners.study run --engine qdrant --experiments E0,E1 --max-n 10000
-
 .\scripts\one_engine.ps1 mongo
 python scripts\check_host.py --expect mongo
 python -m src.runners.study run --engine mongo --experiments E0,E1 --max-n 10000
-
 python -m src.runners.study analyze
 ```
 
-Iso-config uses HNSW `M=16`, `efConstruction=200`, search width 64. Iso-recall sweeps `{32,64,128,256}` and picks the smallest width with Recall@10 ≥ 0.95.
+500K ladder: `.\scripts\continue_500k.ps1` (or `continue_500k_engines.ps1` if embeddings are already frozen). Next protocol cell, when the host allows it: `prepare --max-docs 1000000`, then the same xor engine runs with `--min-n 1000000 --max-n 1000000`.
 
-Committed artifacts you can inspect without rerunning:
-
-- [`experiments/results/`](experiments/results/) — JSONL / CSV for every completed cell
-- [`experiments/plots/`](experiments/plots/) — 15 figures
-- [`data/manifests/MANIFEST.json`](data/manifests/MANIFEST.json) — SHA-256 of the frozen embedding files (vectors themselves are not in git)
-
-## Layout
-
-```text
-docs/                manuscripts + banner / social card
-compose/             docker compose profiles (mongo xor qdrant)
-src/embed            corpus download + frozen BGE-small encode
-src/exact            exact top-100 ground truth
-src/engines          MongoDB and Qdrant adapters
-src/metrics          latency, recall, RSS
-src/runners          E0–E6 + analyze / plots
-scripts/             one_engine.ps1, check_host.py
-experiments/plots    committed figures
-experiments/results  committed JSONL / CSV
-data/                local artifacts (gitignored except MANIFEST)
-```
-
-## Out of scope
-
-Atlas, Kubernetes, sharding, LLM/RAG answer quality, Intel NPU embeddings, `knnBeta`, pgvector, 5M-scale primary claims, native Windows `mongot` (it does not exist). Community `mongot` is **preview** software.
+---
 
 ## License and data
 
-Code and manuscripts are [MIT](LICENSE). The frozen corpus is streamed from public Hugging Face sets (`Tevatron/msmarco-passage-corpus`, BEIR/MS MARCO queries). Those sources keep their own licenses; this repo does not redistribute the raw passages or embedding matrices. See [NOTICE.md](NOTICE.md).
-
-## Citation
+Code and manuscripts are [MIT](LICENSE). Passages are streamed from `Tevatron/msmarco-passage-corpus` and BEIR/MS MARCO queries. This repository does not ship the raw text or the embedding matrices; [`data/manifests/MANIFEST.json`](data/manifests/MANIFEST.json) holds the SHA-256 of the frozen files. Upstream licenses: [NOTICE.md](NOTICE.md).
 
 ```bibtex
 @software{vectordb_proof_2026,
   title  = {VectorDB Proof: MongoDB \$vectorSearch vs Qdrant on a 16 GB laptop},
   author = {Deepak},
   year   = {2026},
-  url    = {https://github.com/drakeRAGE/mongo-vs-qdrant-local}
+  url    = {https://github.com/drakeRAGE/mongo-vs-qdrant-local},
+  note   = {Working study; measured through 500K}
 }
 ```
-
-Also [`CITATION.cff`](CITATION.cff).

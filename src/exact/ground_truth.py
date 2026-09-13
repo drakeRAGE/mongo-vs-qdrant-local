@@ -41,10 +41,13 @@ def _flat_ip(docs: np.ndarray, queries: np.ndarray, k: int) -> np.ndarray:
 
 def compute_ground_truth(n: int, k: int = GT_K) -> Path:
     ensure_dirs()
+    path = GT / f"gt_{n}_top{k}.npy"
+    if path.exists():
+        print(f"ground truth already present {path.name}")
+        return path
     docs = load_embeddings(n)
     queries = load_queries()
     labels = _flat_ip(docs, queries, k)
-    path = GT / f"gt_{n}_top{k}.npy"
     np.save(path, labels)
     return path
 

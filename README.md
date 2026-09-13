@@ -11,7 +11,7 @@ A measured answer on one inventoried 16 GB laptop — not a vendor bake-off.
 [![License: MIT](https://img.shields.io/badge/license-MIT-0B6E4F?style=flat-square)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-3776AB?style=flat-square)](requirements.txt)
 [![Docker Compose](https://img.shields.io/badge/docker-compose%20profiles-2496ED?style=flat-square)](compose/docker-compose.yml)
-[![Measured](https://img.shields.io/badge/measured-250K%20vectors-C4A35A?style=flat-square)](docs/07-results.md)
+[![Measured](https://img.shields.io/badge/measured-500K%20vectors-C4A35A?style=flat-square)](docs/07-results.md)
 
 [Results](docs/07-results.md) · [Protocol](docs/05-protocol.md) · [Threats](docs/06-threats-to-validity.md) · [Cite](CITATION.cff)
 
@@ -19,41 +19,71 @@ A measured answer on one inventoried 16 GB laptop — not a vendor bake-off.
 
 ---
 
-## Finding (through 250K)
+## Finding (through 500K)
 
 On this host, **concurrency 1**, **unfiltered** kNN, **Recall@10 ≥ 0.95**:
 
-- Both engines stay **interactive** (p95 &lt; 50 ms).
-- **MongoDB is faster.** **Qdrant uses less RAM.**
-- The p95 gap **narrows** as N grows (2.64× → 1.73×). There is **no latency crossover** yet.
-- A dedicated vector DB is **not required** for unfiltered kNN at this size.
+- Through **250K**, both engines stay interactive (p95 &lt; 50 ms). Mongo is faster; Qdrant uses less RAM. No latency crossover.
+- At **500K iso-config** (median of 3 trials), Mongo p95 is **69 ms** — the first time it misses the 50 ms bar. Qdrant stays at **32 ms** and **1.08 GB** RSS.
+- That Mongo median is pulled by the two trials immediately after a ~8 min ingest/index (mongot CPU spiked to ~340%). Trial 3 and the iso-recall sweep are **15–17 ms**. Once warm, Mongo is still faster.
+- Iso-recall still picks **ef = 32** for both engines at 100K, 250K, and 500K.
 
 | N | Mongo p95 | Qdrant p95 | p95 ratio | Mongo RSS | Qdrant RSS |
 |---|---:|---:|---:|---:|---:|
 | 10K | 12.0 ms | 31.7 ms | 2.64 | 1.07 GB | — |
 | 50K | 15.1 ms | 32.6 ms | 2.16 | 1.76 GB | 0.21 GB |
 | 100K | 16.5 ms | 32.4 ms | 1.96 | 2.11 GB | 0.29 GB |
-| **250K** | **19.3 ms** | **33.5 ms** | **1.73** | **2.29 GB** | **0.61 GB** |
+| 250K | 19.3 ms | 33.5 ms | 1.73 | 2.29 GB | 0.61 GB |
+| **500K** | **69.4 ms** | **31.7 ms** | **0.46** | **2.20 GB** | **1.08 GB** |
 
-Iso-recall picks **ef = 32** for both engines at 100K and 250K. At **8-way concurrency** Qdrant p95 crosses 50 ms; Mongo does not. Mongo p99 first jumps (~47 ms) at 250K. Protocol cells at **500K / 1M were not run**.
+At **8-way concurrency** and 500K, both stay under 50 ms p95 (Mongo 35 ms, Qdrant 34 ms). Mongo p99 is 148 ms at 8-way. **1M was not run.**
 
 Full tables, every figure, and what we did *not* measure: **[docs/07-results.md](docs/07-results.md)**.
 
+## Is this enough?
+
+**Yes — for the question this laptop can answer.** Through 500K, a dedicated vector DB is **not required** for warm unfiltered kNN at Recall@10 ≥ 0.95. Mongo is faster once warm; Qdrant uses about half the RAM; filters do not flip the ranking.
+
+**No — if you need a hard scale cliff.** Protocol 1M was not run. The iso-config Mongo 69 ms point is a post-ingest warmup artifact, not a crossover. E5 did not restart the container (first-50-no-warmup only). This is one 16 GB Windows box and preview `mongot`. It does not speak for Atlas, 1536-d embeddings, or write-heavy production.
+
+Optional next cell: **1M**, only if the host stays off the pagefile. 5M is out of scope on this machine.
+
 ## Figures
 
+**Headline (iso-recall, the decision number):**
+
 <p align="center">
-  <img src="experiments/plots/e1_p95_vs_n.png" alt="p95 latency vs corpus size" width="48%" />
-  <img src="experiments/plots/e1_p95_ratio_vs_n.png" alt="p95 ratio Qdrant over Mongo vs N" width="48%" />
-</p>
-<p align="center">
-  <img src="experiments/plots/e6_rss_vs_n.png" alt="Docker RSS vs corpus size" width="48%" />
-  <img src="experiments/plots/e2_p95_vs_concurrency.png" alt="p95 vs concurrency" width="48%" />
-</p>
-<p align="center">
-  <img src="experiments/plots/e1_pareto_recall_p95.png" alt="Recall vs p95 Pareto" width="72%" />
+  <img src="experiments/plots/e1_iso_recall_p95_vs_n.png" alt="Iso-recall p95 vs N" width="82%" />
 </p>
 
-<p align="center"><sub>Interactive discussion threshold: p95 &lt; 50 ms, p99 &lt; 100 ms. Ground truth is exact top-100 inner product on the frozen unit vectors.</sub></p>
+**Why the 500K Mongo iso-config spike is not the decision number:**
+
+<p align="center">
+  <img src="experiments/plots/e1_p95_iso_config_vs_iso_recall.png" alt="Iso-config median vs iso-recall operating point" width="96%" />
+</p>
+
+<p align="center">
+  <img src="experiments/plots/e1_p95_vs_n.png" alt="iso-config p95 vs N" width="48%" />
+  <img src="experiments/plots/e1_p95_ratio_vs_n.png" alt="p95 ratio vs N" width="48%" />
+</p>
+<p align="center">
+  <img src="experiments/plots/e6_rss_vs_n.png" alt="Docker RSS vs N" width="48%" />
+  <img src="experiments/plots/e4_ingest_vs_n.png" alt="Time to searchable vs N" width="48%" />
+</p>
+<p align="center">
+  <img src="experiments/plots/e2_p95_vs_concurrency.png" alt="p95 vs concurrency" width="48%" />
+  <img src="experiments/plots/e3_filter_p95.png" alt="Filtered ANN p95" width="48%" />
+</p>
+<p align="center">
+  <img src="experiments/plots/e1_pareto_recall_p95.png" alt="Recall vs p95 Pareto" width="48%" />
+  <img src="experiments/plots/e1_iso_recall_vs_ef.png" alt="p95 and recall vs ef" width="48%" />
+</p>
+<p align="center">
+  <img src="experiments/plots/e5_cold_p95.png" alt="Cold start p95" width="48%" />
+  <img src="experiments/plots/e1_qps_vs_n.png" alt="QPS vs N" width="48%" />
+</p>
+
+<p align="center"><sub>Interactive discussion threshold: p95 &lt; 50 ms, p99 &lt; 100 ms. Ground truth is exact top-100 inner product on the frozen unit vectors. Fifteen committed figures live in <code>experiments/plots/</code>.</sub></p>
 
 ## Why this study exists
 
@@ -135,7 +165,7 @@ Iso-config uses HNSW `M=16`, `efConstruction=200`, search width 64. Iso-recall s
 Committed artifacts you can inspect without rerunning:
 
 - [`experiments/results/`](experiments/results/) — JSONL / CSV for every completed cell
-- [`experiments/plots/`](experiments/plots/) — 13 figures
+- [`experiments/plots/`](experiments/plots/) — 15 figures
 - [`data/manifests/MANIFEST.json`](data/manifests/MANIFEST.json) — SHA-256 of the frozen embedding files (vectors themselves are not in git)
 
 ## Layout

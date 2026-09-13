@@ -13,7 +13,7 @@ abstract: >-
   Reproducible local study of when a dedicated vector database (Qdrant)
   is preferable to MongoDB Community $vectorSearch (mongod + mongot).
   Frozen BGE-small 384-d embeddings, iso-config and iso-recall protocol,
-  measured through 250K vectors on a 16 GB Windows laptop.
+  measured through 500K vectors on a 16 GB Windows laptop.
 keywords:
   - vector search
   - HNSW

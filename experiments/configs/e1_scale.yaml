@@ -1,0 +1,8 @@
+experiment: E1
+concurrency: 1
+selectivity: "100"
+label: e1_iso_config
+slices: [10000, 50000, 100000, 250000, 500000, 1000000]
+ef: 64
+iso_recall_at: [100000, 500000, 1000000]
+ef_sweep: [32, 64, 128, 256]

@@ -1,0 +1,42 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.python-version
+hf_cache/
+.cache/
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+compose/mongo/pwfile
+
+# Generated / bulky local data (rebuilt by `study prepare`)
+data/raw/
+data/embeddings/
+data/ground_truth/
+data/docker/
+*.f32
+*.npy
+*.parquet
+
+# Operator logs
+*.log
+experiments/results/*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp

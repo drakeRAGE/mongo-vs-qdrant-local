@@ -1,0 +1,19 @@
+{
+  "created_utc": "2026-09-12T11:22:14.528166+00:00",
+  "model_name": "BAAI/bge-small-en-v1.5",
+  "normalize": true,
+  "dim": 384,
+  "seed": 20260912,
+  "n_docs": 250000,
+  "n_queries": 500,
+  "corpus_name": "Tevatron/msmarco-passage-corpus",
+  "slices": [
+    10000,
+    50000,
+    100000,
+    250000
+  ],
+  "embeddings_sha256": "500ef31086f38614d042a1077faecb4b16e1daeec776afd6fbef27e1ea51e3a5",
+  "queries_sha256": "1f4538d26c541d73c26541429b3e122e1d8f56a198a5e48bc0a56aa7b7ea9200",
+  "python": "3.10.11 (tags/v3.10.11:7d4cc5a, Apr  5 2023, 00:38:17) [MSC v.1929 64 bit (AMD64)]"
+}

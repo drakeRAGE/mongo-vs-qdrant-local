@@ -1,0 +1,97 @@
+# Mutual exclusion is enforced by scripts/one_engine.ps1 and scripts/check_host.py.
+# Never start --profile mongo and --profile qdrant at the same time.
+#
+# Images used on the first successful local run (12 Sep 2026):
+#   mongodb/mongodb-community-server:8.2.1-ubi8
+#     sha256:27faef628d65f672c1ca0df97c6e518d26b3ab8d3f6976e2f7b7ee296a3755f0
+#   mongodb/mongodb-community-search:latest (mongot 1.70.4)
+#     sha256:63ebc805c6b55d027e345b5224d8713009f21911aedafb50b6c28c1cd9583e4f
+#   qdrant/qdrant:v1.15.4
+
+name: vectordb-proof
+
+services:
+  mongod:
+    profiles: ["mongo"]
+    image: mongodb/mongodb-community-server:8.2.1-ubi8
+    container_name: vectordb-mongod
+    # Override the image entrypoint. Its init-db shutdown handshake fails with
+    # a custom --config + replica-set command on this host.
+    entrypoint: ["mongod"]
+    command: ["--config", "/etc/mongod.conf", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27018:27017"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../data/docker/mongod:/data/db
+      - ./mongo/mongod.conf:/etc/mongod.conf:ro
+    networks:
+      vectordb-net:
+        aliases: [mongod, mongod.search-community]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    mem_limit: 3.5g
+    cpus: 8.0
+
+  mongot:
+    profiles: ["mongo"]
+    image: mongodb/mongodb-community-search:latest
+    container_name: vectordb-mongot
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - "mkdir -p /auth && printf %s mongotPassword > /auth/pwfile && chmod 400 /auth/pwfile && exec /mongot-community/mongot --config=/mongot-community/config.default.yml"
+    volumes:
+      - ../data/docker/mongot:/data/mongot
+      - ./mongo/mongot.conf:/mongot-community/config.default.yml:ro
+    depends_on:
+      mongod:
+        condition: service_healthy
+    ports:
+      - "27028:27028"
+      - "9946:9946"
+      - "8080:8080"
+    networks:
+      vectordb-net:
+        aliases: [mongot, mongot.search-community]
+    mem_limit: 2.5g
+    cpus: 6.0
+
+  qdrant:
+    profiles: ["qdrant"]
+    image: qdrant/qdrant:v1.15.4
+    container_name: vectordb-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      # Named volume (WSL ext4). A Windows bind mount panics Qdrant 1.15
+      # gridstore during HNSW optimize: OutputTooSmall { expected: 4, actual: 0 }.
+      - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    networks:
+      vectordb-net:
+        aliases: [qdrant]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    mem_limit: 6g
+    cpus: 12.0
+
+networks:
+  vectordb-net:
+    name: vectordb-proof-net
+
+volumes:
+  qdrant_storage:
+
+# Mongo still bind-mounts on D:. Qdrant cannot: its mmap store is unsafe on
+# Docker Desktop NTFS/9p bind mounts (optimizer panic, collection stays red).

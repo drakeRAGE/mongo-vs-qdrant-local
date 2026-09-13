@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: "VectorDB Proof: MongoDB $vectorSearch vs Qdrant on a 16 GB laptop"
+message: If you use this protocol or results, please cite this repository.
+type: software
+authors:
+  - name: Deepak
+    website: https://github.com/drakeRAGE
+date-released: "2026-09-12"
+license: MIT
+repository-code: https://github.com/drakeRAGE/mongo-vs-qdrant-local
+url: https://github.com/drakeRAGE/mongo-vs-qdrant-local
+abstract: >-
+  Reproducible local study of when a dedicated vector database (Qdrant)
+  is preferable to MongoDB Community $vectorSearch (mongod + mongot).
+  Frozen BGE-small 384-d embeddings, iso-config and iso-recall protocol,
+  measured through 250K vectors on a 16 GB Windows laptop.
+keywords:
+  - vector search
+  - HNSW
+  - MongoDB
+  - Qdrant
+  - benchmark
+  - recall

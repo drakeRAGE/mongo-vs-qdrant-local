@@ -1,0 +1,19 @@
+# Fallback only. Use if two-container mongod+mongot fail to become queryable.
+# This image bundles mongod and mongot and is a development topology, not production.
+# Record the deviation in the trial JSON if this file is used.
+
+name: vectordb-proof-atlas-local
+
+services:
+  atlas-local:
+    image: mongodb/mongodb-atlas-local:8.2.0
+    container_name: vectordb-atlas-local
+    ports:
+      - "27017:27017"
+    volumes:
+      - ../data/docker/atlas-local:/data/db
+    environment:
+      MONGODB_INITDB_ROOT_USERNAME: admin
+      MONGODB_INITDB_ROOT_PASSWORD: admin
+    mem_limit: 8g
+    cpus: 12.0

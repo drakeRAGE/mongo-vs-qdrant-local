@@ -1,0 +1,16 @@
+seed: 20260912
+model: BAAI/bge-small-en-v1.5
+dim: 384
+normalize: true
+k: 10
+hnsw:
+  m: 16
+  ef_construct: 200
+iso_config_ef: 64
+ef_sweep: [32, 64, 128, 256]
+recall_target: 0.95
+warmup: 50
+measured_queries: 500
+trials: 3
+slices: [10000, 50000, 100000, 250000, 500000, 1000000]
+batch_ingest: 256

@@ -26,6 +26,7 @@ dependencies = [
 
 [project.optional-dependencies]
 faiss = ["faiss-cpu>=1.8"]
+harness = ["pytest>=8.0"]
 
 [project.urls]
 Homepage = "https://github.com/drakeRAGE/mongo-vs-qdrant-local"

@@ -168,7 +168,7 @@ flowchart LR
 | Queries | 50 warmup + 500 measured; 3 trials; median of trial percentiles |
 | Seed | `20260912` |
 
-One engine at a time. Docker / WSL2 capped at 10 GB on this host. A trial is discarded if the pagefile is active in the timed window, both profiles are up, measured n &lt; 200, or error rate &gt; 1%.
+One engine at a time. Docker / WSL2 capped at 10 GB on this host. A trial is discarded if the pagefile is active in the timed window, both profiles are up, measured n &lt; 200, or error rate &gt; 1%. Harness checks (`python -m pytest tests -q`) cover recall alignment, percentiles, filters, and host gates. They do not replace E0 or a scale cell.
 
 ---
 
